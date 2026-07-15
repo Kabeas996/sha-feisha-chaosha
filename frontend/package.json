@@ -1,0 +1,25 @@
+{
+  "name": "@sha-feisha-chaosha/frontend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Playable local React client for 杀·飞杀·超杀.",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "socket.io-client": "^4.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "@vitejs/plugin-react": "^5.0.4",
+    "typescript": "^5.9.0",
+    "vite": "^7.1.7"
+  }
+}
