@@ -66,9 +66,9 @@ export function App() {
         <div className="ambient ambient-one" />
         <div className="ambient ambient-two" />
         <section className="hero-card">
-          <div className="brand-mark" aria-hidden="true">杀</div>
+          <div className="brand-mark" aria-hidden="true">诀</div>
           <p className="eyebrow">双人 · 同屏 · 心理博弈</p>
-          <h1>杀<span>·</span>飞杀<span>·</span>超杀</h1>
+          <h1>三诀</h1>
           <p className="hero-copy">藏住你的招式，看穿对手的选择。三点生命，一念胜负。</p>
           <button className="primary-button" onClick={() => setScreen("online")}>开始在线对战</button>
           <button className="secondary-button" onClick={startMatch}>同屏双人试炼</button>
