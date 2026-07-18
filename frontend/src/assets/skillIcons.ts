@@ -18,8 +18,10 @@ export const SKILL_ICON_STATES = [
 export type SkillIconKey = (typeof SKILL_ICON_KEYS)[number];
 export type SkillIconState = (typeof SKILL_ICON_STATES)[number];
 
+const SKILL_ICON_VERSION = "20260718";
+
 function iconUrl(name: string): string {
-  return `/icons/${name}.png`;
+  return `/icons/${name}.png?v=${SKILL_ICON_VERSION}`;
 }
 
 export const skillIcons: Readonly<
