@@ -48,6 +48,12 @@ npm.cmd run dev
 - 服务器统一三秒截止时间，客户端只显示服务器 deadline
 - 未操作回合、连续三回合判负和十五秒断线重连
 - 在线再战与单人视角界面
+- 联机攻击、格挡、受击与致命一击反馈
+- Kenney CC0 动作、命中、格挡和胜利音效
+
+## 音效许可
+
+游戏音效取自 Kenney 的 Interface Sounds、RPG Audio 和 Impact Sounds，均采用 Creative Commons CC0 1.0。详细文件映射见 `frontend/assets/audio/README.md`。
 
 ## 开发验证
 

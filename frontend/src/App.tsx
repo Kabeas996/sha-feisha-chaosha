@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   ACTIONS,
@@ -15,6 +15,7 @@ import {
   type LocalRoundRecord,
 } from "../../backend/src/local-game/index.ts";
 import { getSkillIcon } from "./assets/skillIcons.ts";
+import { playRoundSounds } from "./audio/gameAudio.ts";
 import { ActionGrid, PlayerPanel } from "./components/BattleUi.tsx";
 import { OnlineGame } from "./online/OnlineGame.tsx";
 
@@ -32,6 +33,7 @@ export function App() {
   const [match, setMatch] = useState<LocalMatchState>(() => createLocalMatch());
   const [showRules, setShowRules] = useState(false);
   const [clapStep, setClapStep] = useState(0);
+  const soundedRound = useRef<number | null>(null);
 
   useEffect(() => {
     if (match.phase !== "ready-to-reveal") return;
@@ -50,6 +52,16 @@ export function App() {
       window.clearTimeout(reveal);
     };
   }, [match.phase]);
+
+  useEffect(() => {
+    if (match.lastRound === null) {
+      soundedRound.current = null;
+      return;
+    }
+    if (soundedRound.current === match.lastRound.round) return;
+    soundedRound.current = match.lastRound.round;
+    playRoundSounds(match.lastRound);
+  }, [match.lastRound]);
 
   const startMatch = () => {
     setMatch(createLocalMatch());

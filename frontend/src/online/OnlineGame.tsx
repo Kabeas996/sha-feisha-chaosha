@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 import {
   ACTIONS,
@@ -13,6 +13,7 @@ import type {
   RoomAck,
 } from "../../../backend/src/online/protocol.ts";
 import { getSkillIcon } from "../assets/skillIcons.ts";
+import { playRoundSounds } from "../audio/gameAudio.ts";
 import { ActionGrid, PlayerPanel } from "../components/BattleUi.tsx";
 import { gameSocket } from "./socket.ts";
 
@@ -237,7 +238,26 @@ function OnlineBattle({
   const self = snapshot.players.find((player) => player.id === snapshot.selfId);
   const opponent = snapshot.players.find((player) => player.id !== snapshot.selfId);
   const [actionError, setActionError] = useState<string | null>(null);
+  const soundedRound = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (snapshot.lastResult === null) {
+      soundedRound.current = null;
+      return;
+    }
+    if (soundedRound.current === snapshot.lastResult.round) return;
+    soundedRound.current = snapshot.lastResult.round;
+    playRoundSounds(snapshot.lastResult);
+  }, [snapshot.lastResult]);
+
   if (self === undefined || opponent === undefined) return null;
+
+  const result = snapshot.lastResult;
+  const selfDamage = getPlayerDamage(result, self.id);
+  const opponentDamage = getPlayerDamage(result, opponent.id);
+  const selfBlocked = didPlayerBlock(result, self.id);
+  const opponentBlocked = didPlayerBlock(result, opponent.id);
+  const superImpact = result?.player1Action === "super-kill" || result?.player2Action === "super-kill";
 
   const submit = (action: ActionId) => {
     setActionError(null);
@@ -249,14 +269,22 @@ function OnlineBattle({
   const canAct = connected && snapshot.phase === "selecting" && !self.actionLocked;
 
   return (
-    <main className="battle-shell online-battle-shell">
+    <main className={`battle-shell online-battle-shell ${selfDamage > 0 ? "online-self-hit" : ""} ${opponentDamage > 0 ? "online-opponent-hit" : ""} ${superImpact ? "online-super-impact" : ""}`}>
       <header className="battle-header">
         <button className="icon-button" onClick={onLeave} aria-label="离开对局">←</button>
         <div className="round-label"><span>回合</span><strong>{snapshot.round}</strong></div>
         <ConnectionBadge connected={connected} compact />
       </header>
       <div className="online-battle-layout">
-        <PlayerPanel name={opponent.nickname} state={opponent} position="opponent" statusLabel={opponent.actionLocked ? "已锁定" : "思考中"} idleStrikes={opponent.idleStrikes} />
+        <PlayerPanel
+          name={opponent.nickname}
+          state={opponent}
+          position="opponent"
+          statusLabel={opponentDamage > 0 ? `受到 ${opponentDamage} 点伤害` : opponentBlocked ? "防御成功" : opponent.actionLocked ? "已锁定" : "思考中"}
+          idleStrikes={opponent.idleStrikes}
+          damage={opponentDamage}
+          feedback={opponentDamage > 0 ? "hit" : opponentBlocked ? "blocked" : null}
+        />
         <section className="online-arena" aria-live="polite">
           {snapshot.phase === "selecting" && (
             <SelectionTimer deadline={snapshot.deadline} locked={self.actionLocked} opponentLocked={opponent.actionLocked} />
@@ -266,7 +294,15 @@ function OnlineBattle({
           )}
         </section>
         <section className="control-deck online-control-deck">
-          <PlayerPanel name={self.nickname} state={self} position="self" statusLabel={self.actionLocked ? "行动已锁定" : "选择招式"} idleStrikes={self.idleStrikes} />
+          <PlayerPanel
+            name={self.nickname}
+            state={self}
+            position="self"
+            statusLabel={selfDamage > 0 ? `受到 ${selfDamage} 点伤害` : selfBlocked ? "防御成功" : self.actionLocked ? "行动已锁定" : "选择招式"}
+            idleStrikes={self.idleStrikes}
+            damage={selfDamage}
+            feedback={selfDamage > 0 ? "hit" : selfBlocked ? "blocked" : null}
+          />
           <ActionGrid energy={self.energy} disabled={!canAct} locked={self.actionLocked} playerLabel={self.nickname} onSelect={submit} />
           {(actionError ?? error) && <p className="action-error" role="alert">{actionError ?? error}</p>}
         </section>
@@ -311,11 +347,13 @@ function CleanRoundResult({ result, players }: { result: PublicOnlineRoundResult
 }
 
 function OnlineAction({ action, name, damaged }: { action: ServerActionId; name: string; damaged: boolean }) {
+  const definition = action === "idle" ? null : ACTIONS[action];
   return (
-    <div className={`online-action ${damaged ? "damaged" : ""}`}>
+    <div className={`online-action ${damaged ? "damaged" : ""} kind-${definition?.kind ?? "idle"} tier-${definition?.level ?? 0}`}>
       {action === "idle" ? <div className="idle-action-icon">空</div> : <img src={getSkillIcon(action)} alt={ACTIONS[action].label} />}
       <span>{name}</span>
       <b>{action === "idle" ? "无动作" : ACTIONS[action].label}</b>
+      {damaged && <em className="damage-tag" aria-label="受到 1 点伤害">-1</em>}
     </div>
   );
 }
@@ -332,6 +370,11 @@ function OnlineFinished({ snapshot, self, onLeave }: { snapshot: OnlineRoomSnaps
       <section className="result-card compact-finish-card">
         <p className="eyebrow">对局结束</p>
         <h2 id="online-finished-title">{title}</h2>
+        {snapshot.lastResult && (
+          <div className="finished-round-recap">
+            <CleanRoundResult result={snapshot.lastResult} players={snapshot.players} />
+          </div>
+        )}
         <div className={`finish-seal ${isWinner ? "winner" : ""}`}>{snapshot.winnerId === null ? "和" : isWinner ? "胜" : "负"}</div>
         <p className="result-summary">{winner ? `${winner.nickname} 获胜 · ` : ""}{reason}</p>
         <button className="primary-button" disabled={self.ready} onClick={() => gameSocket.emit("game:rematch", consumeBasicAck)}>{self.ready ? "已申请再战" : "再战一局"}</button>
@@ -365,15 +408,29 @@ function onlineResultText(
   player1: PublicOnlinePlayer | undefined,
   player2: PublicOnlinePlayer | undefined,
 ): string {
+  if (result.player1Damage > 0) return `${player1?.nickname ?? "玩家一"} 受到 ${result.player1Damage} 点伤害`;
+  if (result.player2Damage > 0) return `${player2?.nickname ?? "玩家二"} 受到 ${result.player2Damage} 点伤害`;
   if (result.player1Action === "idle" && result.player2Action === "idle") return "双方均未出招";
   if (result.player1Action === "idle") return `${player1?.nickname ?? "玩家一"} 本回合未操作`;
   if (result.player2Action === "idle") return `${player2?.nickname ?? "玩家二"} 本回合未操作`;
   if (result.interaction === "attacks-cancelled") return "同级交锋，招式抵消";
   if (result.interaction === "player1-blocked") return `${player2?.nickname ?? "玩家二"} 防御成功`;
   if (result.interaction === "player2-blocked") return `${player1?.nickname ?? "玩家一"} 防御成功`;
-  if (result.player1Damage > 0) return `${player1?.nickname ?? "玩家一"} 受到 1 点伤害`;
-  if (result.player2Damage > 0) return `${player2?.nickname ?? "玩家二"} 受到 1 点伤害`;
   return "双方试探，无事发生";
+}
+
+function getPlayerDamage(result: PublicOnlineRoundResult | null, playerId: string): number {
+  if (result === null) return 0;
+  if (result.player1Id === playerId) return result.player1Damage;
+  if (result.player2Id === playerId) return result.player2Damage;
+  return 0;
+}
+
+function didPlayerBlock(result: PublicOnlineRoundResult | null, playerId: string): boolean {
+  if (result === null) return false;
+  if (result.player1Id === playerId) return result.interaction === "player2-blocked";
+  if (result.player2Id === playerId) return result.interaction === "player1-blocked";
+  return false;
 }
 
 function consumeBasicAck(response: BasicAck): void {

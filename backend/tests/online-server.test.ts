@@ -5,6 +5,7 @@ import type { AddressInfo } from "node:net";
 import { io as createClient, type Socket as ClientSocket } from "socket.io-client";
 
 import { createOnlineServer, type OnlineServerApp } from "../src/online/createOnlineServer.ts";
+import type { ActionId } from "../src/game-rules/index.ts";
 import type {
   BasicAck,
   ClientToServerEvents,
@@ -59,6 +60,40 @@ describe("Socket.IO online game", () => {
     assert.deepEqual(finished.players.map((player) => player.idleStrikes), [3, 3]);
     assert.deepEqual(finished.players.map((player) => player.energy), [0, 0]);
   });
+
+  test("broadcasts damage and updated hp to both online players", async () => {
+    const { player1, player2 } = await createStartedRoom();
+    const round1Result = waitForResult(player1);
+    const round2Selecting = waitForState(
+      player1,
+      (state) => state.phase === "selecting" && state.round === 2,
+    );
+
+    assert.deepEqual(await submitAction(player1, "stone"), { ok: true });
+    assert.deepEqual(await submitAction(player2, "stone"), { ok: true });
+    await round1Result;
+    await round2Selecting;
+
+    const player1Result = waitForResult(player1);
+    const player2Result = waitForResult(player2);
+    const revealState = waitForState(
+      player2,
+      (state) => state.phase === "revealing" && state.round === 2,
+    );
+    assert.deepEqual(await submitAction(player1, "kill"), { ok: true });
+    assert.deepEqual(await submitAction(player2, "stone"), { ok: true });
+
+    const [result1, result2, revealed] = await Promise.all([
+      player1Result,
+      player2Result,
+      revealState,
+    ]);
+    assert.deepEqual(result1, result2);
+    assert.equal(result1.player1Damage, 0);
+    assert.equal(result1.player2Damage, 1);
+    assert.equal(result1.interaction, "player2-hit");
+    assert.equal(revealed.players.find((player) => player.id === result1.player2Id)?.hp, 2);
+  });
 });
 
 async function createStartedRoom(): Promise<{ player1: TestClient; player2: TestClient }> {
@@ -108,7 +143,7 @@ function markReady(client: TestClient): Promise<BasicAck> {
   return new Promise((resolve) => client.emit("room:ready", resolve));
 }
 
-function submitAction(client: TestClient, action: "stone"): Promise<BasicAck> {
+function submitAction(client: TestClient, action: ActionId): Promise<BasicAck> {
   return new Promise((resolve) => client.emit("game:action", { action }, resolve));
 }
 

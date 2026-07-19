@@ -6,6 +6,7 @@ import {
   type PlayerCombatState,
 } from "../../../backend/src/game-rules/index.ts";
 import { getSkillIcon, type SkillIconState } from "../assets/skillIcons.ts";
+import { playSelectionSound } from "../audio/gameAudio.ts";
 
 const ACTION_ORDER: readonly ActionId[] = [
   "stone",
@@ -33,15 +34,19 @@ export function PlayerPanel({
   position,
   statusLabel,
   idleStrikes = 0,
+  damage = 0,
+  feedback = null,
 }: {
   name: string;
   state: PlayerCombatState;
   position: "opponent" | "self";
   statusLabel?: string;
   idleStrikes?: number;
+  damage?: number;
+  feedback?: "hit" | "blocked" | null;
 }) {
   return (
-    <section className={`player-panel ${position}`}>
+    <section className={`player-panel ${position} ${feedback === "hit" ? "taking-hit" : ""} ${feedback === "blocked" ? "guard-success" : ""}`}>
       <div className="avatar" aria-hidden="true">{name.at(-1)}</div>
       <div className="player-info">
         <div className="player-name-row">
@@ -59,6 +64,8 @@ export function PlayerPanel({
         </div>
         {idleStrikes > 0 && <div className="idle-warning">未操作警告 {idleStrikes}/3</div>}
       </div>
+      {damage > 0 && <strong className="damage-float" aria-label={`受到 ${damage} 点伤害`}>-{damage}</strong>}
+      {feedback === "blocked" && <strong className="guard-float" aria-label="防御成功">挡</strong>}
     </section>
   );
 }
@@ -116,7 +123,10 @@ function ActionButton({
     <button
       className={`action-button kind-${definition.kind}`}
       disabled={isDisabled}
-      onClick={() => onSelect(action)}
+      onClick={() => {
+        playSelectionSound();
+        onSelect(action);
+      }}
       onPointerDown={() => !isDisabled && setPressed(true)}
       onPointerUp={release}
       onPointerCancel={release}
